@@ -265,3 +265,9 @@
         (ok true)
     )
 )
+
+;; Utility functions
+
+(define-private (get-current-price)
+    (get price (unwrap! (map-get? price-feeds "BTC-USD") u0))
+)
