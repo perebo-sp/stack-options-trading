@@ -1,7 +1,18 @@
 ;; Options Trading Platform
 ;; Version: 1.0.0
 
-(use-trait sip-010-trait .sip-010-trait.sip-010-trait)
+;; Define SIP-010 trait
+(define-trait sip-010-trait
+    (
+        (transfer (uint principal principal (optional (buff 34))) (response bool uint))
+        (get-balance (principal) (response uint uint))
+        (get-total-supply () (response uint uint))
+        (get-decimals () (response uint uint))
+        (get-token-uri () (response (optional (string-utf8 256)) uint))
+        (get-name () (response (string-ascii 32) uint))
+        (get-symbol () (response (string-ascii 32) uint))
+    )
+)
 
 ;; Error codes
 (define-constant ERR-NOT-AUTHORIZED (err u1000))
@@ -13,6 +24,10 @@
 (define-constant ERR-INSUFFICIENT-COLLATERAL (err u1006))
 (define-constant ERR-ALREADY-EXERCISED (err u1007))
 (define-constant ERR-INVALID-PREMIUM (err u1008))
+
+;; Utility Functions
+(define-private (get-min (a uint) (b uint))
+    (if (< a b) a b))
 
 ;; Data Types
 (define-map options
@@ -26,7 +41,7 @@
         expiry: uint,
         is-exercised: bool,
         option-type: (string-ascii 4),  ;; "CALL" or "PUT"
-        state: (string-ascii 8)         ;; "ACTIVE", "EXPIRED", "EXERCISED"
+        state: (string-ascii 9)         ;; Changed to 9 to accommodate "EXERCISED"
     }
 )
 
@@ -56,34 +71,9 @@
     }
 )
 
-;; Black-Scholes Implementation
-(define-private (calculate-black-scholes-price 
-    (spot-price uint)
-    (strike-price uint)
-    (time-to-expiry uint)
-    (volatility uint)
-    (risk-free-rate uint)
-    (option-type (string-ascii 4)))
-    ;; Simplified Black-Scholes calculation
-    ;; Returns premium in base units
-    (let (
-        (time-sqrt (sqrti (* time-to-expiry u100000)))
-        (vol-adjustment (* volatility time-sqrt))
-        (price-ratio (/ (* spot-price u100000000) strike-price))
-    )
-        (if (is-eq option-type "CALL")
-            ;; Call option pricing
-            (/ (* price-ratio vol-adjustment) u100000)
-            ;; Put option pricing
-            (/ (* strike-price vol-adjustment) (* spot-price u100000))
-        )
-    )
-)
-
-;; Core Functions
-
 ;; Write a new option
 (define-public (write-option
+    (token <sip-010-trait>)
     (collateral-amount uint)
     (strike-price uint)
     (premium uint)
@@ -98,8 +88,12 @@
         (asserts! (> premium u0) ERR-INVALID-PREMIUM)
         (asserts! (check-collateral-requirement collateral-amount strike-price option-type) ERR-INSUFFICIENT-COLLATERAL)
         
-        ;; Lock collateral
-        (try! (stx-transfer? collateral-amount tx-sender (as-contract tx-sender)))
+        ;; Lock collateral using SIP-010 token
+        (try! (contract-call? token transfer 
+            collateral-amount 
+            tx-sender 
+            (as-contract tx-sender) 
+            none))
         
         ;; Create option
         (map-set options option-id {
@@ -134,7 +128,9 @@
 )
 
 ;; Buy an option
-(define-public (buy-option (option-id uint))
+(define-public (buy-option 
+    (token <sip-010-trait>)
+    (option-id uint))
     (let (
         (option (unwrap! (map-get? options option-id) ERR-OPTION-NOT-FOUND))
         (premium (get premium option))
@@ -142,8 +138,12 @@
         (asserts! (is-none (get holder option)) ERR-ALREADY-EXERCISED)
         (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
         
-        ;; Transfer premium
-        (try! (stx-transfer? premium tx-sender (get writer option)))
+        ;; Transfer premium using the token
+        (try! (contract-call? token transfer
+            premium
+            tx-sender
+            (get writer option)
+            none))
         
         ;; Update option
         (map-set options option-id (merge option { 
@@ -167,7 +167,9 @@
 )
 
 ;; Exercise option
-(define-public (exercise-option (option-id uint))
+(define-public (exercise-option 
+    (token <sip-010-trait>)
+    (option-id uint))
     (let (
         (option (unwrap! (map-get? options option-id) ERR-OPTION-NOT-FOUND))
         (current-price (get-current-price))
@@ -177,8 +179,8 @@
         (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
         
         (if (is-eq (get option-type option) "CALL")
-            (exercise-call option current-price)
-            (exercise-put option current-price)
+            (exercise-call token option current-price)
+            (exercise-put token option current-price)
         )
     )
 )
@@ -192,7 +194,9 @@
     )
 )
 
-(define-private (exercise-call (option {
+(define-private (exercise-call 
+    (token <sip-010-trait>)
+    (option {
         writer: principal,
         holder: (optional principal),
         collateral-amount: uint,
@@ -201,21 +205,26 @@
         expiry: uint,
         is-exercised: bool,
         option-type: (string-ascii 4),
-        state: (string-ascii 8)
-    }) (current-price uint))
+        state: (string-ascii 9)
+    }) 
+    (current-price uint))
     (let (
         (profit (- current-price (get strike-price option)))
-        (payout (min profit (get collateral-amount option)))
+        (payout (get-min profit (get collateral-amount option)))
     )
-        ;; Transfer payout
-        (try! (as-contract (stx-transfer? payout tx-sender (unwrap! (get holder option) ERR-NOT-AUTHORIZED))))
+        ;; Transfer payout using token
+        (try! (as-contract (contract-call? token transfer
+            payout
+            tx-sender
+            (unwrap! (get holder option) ERR-NOT-AUTHORIZED)
+            none)))
         
         ;; Return remaining collateral to writer
-        (try! (as-contract (stx-transfer? 
+        (try! (as-contract (contract-call? token transfer
             (- (get collateral-amount option) payout)
             tx-sender
             (get writer option)
-        )))
+            none)))
         
         ;; Update option state
         (map-set options (get-option-id option) (merge option {
@@ -227,7 +236,9 @@
     )
 )
 
-(define-private (exercise-put (option {
+(define-private (exercise-put
+    (token <sip-010-trait>)
+    (option {
         writer: principal,
         holder: (optional principal),
         collateral-amount: uint,
@@ -236,21 +247,26 @@
         expiry: uint,
         is-exercised: bool,
         option-type: (string-ascii 4),
-        state: (string-ascii 8)
-    }) (current-price uint))
+        state: (string-ascii 9)
+    })
+    (current-price uint))
     (let (
         (profit (- (get strike-price option) current-price))
-        (payout (min profit (get collateral-amount option)))
+        (payout (get-min profit (get collateral-amount option)))
     )
-        ;; Transfer payout
-        (try! (as-contract (stx-transfer? payout tx-sender (unwrap! (get holder option) ERR-NOT-AUTHORIZED))))
+        ;; Transfer payout using token
+        (try! (as-contract (contract-call? token transfer
+            payout
+            tx-sender
+            (unwrap! (get holder option) ERR-NOT-AUTHORIZED)
+            none)))
         
         ;; Return remaining collateral to writer
-        (try! (as-contract (stx-transfer? 
+        (try! (as-contract (contract-call? token transfer
             (- (get collateral-amount option) payout)
             tx-sender
             (get writer option)
-        )))
+            none)))
         
         ;; Update option state
         (map-set options (get-option-id option) (merge option {
@@ -277,7 +293,7 @@
         expiry: uint,
         is-exercised: bool,
         option-type: (string-ascii 4),
-        state: (string-ascii 8)
+        state: (string-ascii 9)
     }))
     (var-get next-option-id)
 )
