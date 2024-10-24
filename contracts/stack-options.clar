@@ -30,3 +30,12 @@
         state: (string-ascii 8)         ;; "ACTIVE", "EXPIRED", "EXERCISED"
     }
 )
+
+(define-map user-positions
+    principal
+    {
+        written-options: (list 10 uint),
+        held-options: (list 10 uint),
+        total-collateral-locked: uint
+    }
+)
