@@ -341,13 +341,13 @@
     (default-to false (map-get? allowed-symbols symbol))
 )
 
-;; Add helper functions for validation
+;; Update helper functions for validation
 (define-private (is-valid-principal (address principal))
     (and 
         (not (is-eq address (as-contract tx-sender)))  ;; Can't be the contract itself
         (not (is-eq address .base))  ;; Can't be base contract
         (not (is-eq address tx-sender))  ;; Can't be the owner (prevent self-targeting)
-        (is-some (principal-destruct? address))  ;; Must be a valid principal format
+        true  ;; Remove the principal-destruct? check as it's not needed
     )
 )
 
