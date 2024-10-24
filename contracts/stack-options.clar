@@ -285,3 +285,9 @@
     }))
     (var-get next-option-id)
 )
+
+;; Read-only functions
+
+(define-read-only (get-option (option-id uint))
+    (map-get? options option-id)
+)
