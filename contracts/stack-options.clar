@@ -291,3 +291,7 @@
 (define-read-only (get-option (option-id uint))
     (map-get? options option-id)
 )
+
+(define-read-only (get-user-position (user principal))
+    (map-get? user-positions user)
+)
