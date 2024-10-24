@@ -168,3 +168,21 @@
         (ok true)
     )
 )
+
+
+;; Exercise option
+(define-public (exercise-option (option-id uint))
+    (let (
+        (option (unwrap! (map-get? options option-id) ERR-OPTION-NOT-FOUND))
+        (current-price (get-current-price))
+    )
+        (asserts! (is-eq (some tx-sender) (get holder option)) ERR-NOT-AUTHORIZED)
+        (asserts! (not (get is-exercised option)) ERR-ALREADY-EXERCISED)
+        (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
+        
+        (if (is-eq (get option-type option) "CALL")
+            (exercise-call option current-price)
+            (exercise-put option current-price)
+        )
+    )
+)
