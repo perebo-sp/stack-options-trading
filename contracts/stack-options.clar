@@ -230,3 +230,38 @@
         (ok true)
     )
 )
+
+(define-private (exercise-put (option {
+        writer: principal,
+        holder: (optional principal),
+        collateral-amount: uint,
+        strike-price: uint,
+        premium: uint,
+        expiry: uint,
+        is-exercised: bool,
+        option-type: (string-ascii 4),
+        state: (string-ascii 8)
+    }) (current-price uint))
+    (let (
+        (profit (- (get strike-price option) current-price))
+        (payout (min profit (get collateral-amount option)))
+    )
+        ;; Transfer payout
+        (try! (as-contract (stx-transfer? payout tx-sender (unwrap! (get holder option) ERR-NOT-AUTHORIZED))))
+        
+        ;; Return remaining collateral to writer
+        (try! (as-contract (stx-transfer? 
+            (- (get collateral-amount option) payout)
+            tx-sender
+            (get writer option)
+        )))
+        
+        ;; Update option state
+        (map-set options (get-option-id option) (merge option {
+            is-exercised: true,
+            state: "EXERCISED"
+        }))
+        
+        (ok true)
+    )
+)
