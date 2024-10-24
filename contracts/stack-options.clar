@@ -30,7 +30,12 @@
 (define-constant ERR-INVALID-SYMBOL (err u1010))
 (define-constant ERR-INVALID-TIMESTAMP (err u1011))
 
+;; Add validation for admin inputs
 
+;; Add new error constants
+(define-constant ERR-INVALID-ADDRESS (err u1012))
+(define-constant ERR-ZERO-ADDRESS (err u1013))
+(define-constant ERR-EMPTY-SYMBOL (err u1014))
 
 ;; Utility Functions
 (define-private (get-min (a uint) (b uint))
@@ -336,6 +341,40 @@
     (default-to false (map-get? allowed-symbols symbol))
 )
 
+;; Add helper functions for validation
+(define-private (is-valid-principal (address principal))
+    (and 
+        (not (is-eq address (as-contract tx-sender)))  ;; Can't be the contract itself
+        (not (is-eq address .base))  ;; Can't be base contract
+        (not (is-eq address tx-sender))  ;; Can't be the owner (prevent self-targeting)
+        (is-some (principal-destruct? address))  ;; Must be a valid principal format
+    )
+)
+
+(define-private (is-valid-symbol (symbol (string-ascii 10)))
+    (and
+        (not (is-eq symbol ""))  ;; Can't be empty
+        (not (is-eq symbol " "))  ;; Can't be just whitespace
+        (>= (len symbol) u2)      ;; Must be at least 2 chars
+    )
+)
+
+(define-private (is-critical-token (token principal))
+    ;; Add any tokens that shouldn't be removed
+    (or 
+        (is-eq token .wrapped-btc)
+        (is-eq token .wrapped-stx)
+    )
+)
+
+(define-private (is-critical-symbol (symbol (string-ascii 10)))
+    ;; Add any symbols that shouldn't be removed
+    (or
+        (is-eq symbol "BTC-USD")
+        (is-eq symbol "STX-USD")
+    )
+)
+
 ;; Read-only functions
 
 (define-read-only (get-option (option-id uint))
@@ -381,9 +420,20 @@
 )
 
 ;; Admin function to manage approved tokens
+;; Update admin functions with validation
+
 (define-public (set-approved-token (token principal) (approved bool))
     (begin
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (asserts! (is-valid-principal token) ERR-INVALID-ADDRESS)
+        (asserts! (not (is-eq token .base)) ERR-INVALID-TOKEN)  ;; Prevent setting base token
+        
+        ;; Additional check to prevent removing critical tokens
+        (asserts! (or 
+            approved  ;; If we're approving, this check doesn't matter
+            (not (is-critical-token token))  ;; If removing, check it's not critical
+        ) ERR-NOT-AUTHORIZED)
+        
         (map-set approved-tokens token approved)
         (ok true)
     )
@@ -392,6 +442,14 @@
 (define-public (set-allowed-symbol (symbol (string-ascii 10)) (allowed bool))
     (begin
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (asserts! (is-valid-symbol symbol) ERR-EMPTY-SYMBOL)
+        
+        ;; Additional check to prevent removing critical symbols
+        (asserts! (or 
+            allowed  ;; If we're allowing, this check doesn't matter
+            (not (is-critical-symbol symbol))  ;; If removing, check it's not critical
+        ) ERR-NOT-AUTHORIZED)
+        
         (map-set allowed-symbols symbol allowed)
         (ok true)
     )
