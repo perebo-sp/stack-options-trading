@@ -30,6 +30,8 @@
 (define-constant ERR-INVALID-SYMBOL (err u1010))
 (define-constant ERR-INVALID-TIMESTAMP (err u1011))
 
+
+
 ;; Utility Functions
 (define-private (get-min (a uint) (b uint))
     (if (< a b) a b))
@@ -82,6 +84,12 @@
     }
 )
 
+;; Add validation to price feed updates
+(define-map allowed-symbols
+    (string-ascii 10)
+    bool
+)
+
 ;; Write a new option
 (define-public (write-option
     (token <sip-010-trait>)
@@ -93,13 +101,17 @@
     (let (
         (option-id (var-get next-option-id))
         (current-time block-height)
+        (token-principal (contract-of token))
     )
+        ;; Validate token
+        (asserts! (is-approved-token token-principal) ERR-INVALID-TOKEN)
         (asserts! (> expiry current-time) ERR-INVALID-EXPIRY)
         (asserts! (> strike-price u0) ERR-INVALID-STRIKE-PRICE)
         (asserts! (> premium u0) ERR-INVALID-PREMIUM)
         (asserts! (check-collateral-requirement collateral-amount strike-price option-type) ERR-INSUFFICIENT-COLLATERAL)
         
-        ;; Lock collateral using SIP-010 token
+        
+        ;; Lock collateral using validated token
         (try! (contract-call? token transfer 
             collateral-amount 
             tx-sender 
@@ -145,7 +157,10 @@
     (let (
         (option (unwrap! (map-get? options option-id) ERR-OPTION-NOT-FOUND))
         (premium (get premium option))
+        (token-principal (contract-of token))
     )
+        ;; Validate token
+        (asserts! (is-approved-token token-principal) ERR-INVALID-TOKEN)
         (asserts! (is-none (get holder option)) ERR-ALREADY-EXERCISED)
         (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
         
@@ -184,7 +199,10 @@
     (let (
         (option (unwrap! (map-get? options option-id) ERR-OPTION-NOT-FOUND))
         (current-price (get-current-price))
+        (token-principal (contract-of token))
     )
+        ;; Validate token
+        (asserts! (is-approved-token token-principal) ERR-INVALID-TOKEN)
         (asserts! (is-eq (some tx-sender) (get holder option)) ERR-NOT-AUTHORIZED)
         (asserts! (not (get is-exercised option)) ERR-ALREADY-EXERCISED)
         (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
@@ -314,6 +332,10 @@
     (default-to false (map-get? approved-tokens token))
 )
 
+(define-private (is-allowed-symbol (symbol (string-ascii 10)))
+    (default-to false (map-get? allowed-symbols symbol))
+)
+
 ;; Read-only functions
 
 (define-read-only (get-option (option-id uint))
@@ -345,11 +367,32 @@
     (timestamp uint))
     (begin
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (asserts! (is-allowed-symbol symbol) ERR-INVALID-SYMBOL)
+        (asserts! (>= timestamp block-height) ERR-INVALID-TIMESTAMP)
+        (asserts! (> price u0) ERR-INVALID-STRIKE-PRICE)
+        
         (map-set price-feeds symbol {
             price: price,
             timestamp: timestamp,
             source: tx-sender
         })
+        (ok true)
+    )
+)
+
+;; Admin function to manage approved tokens
+(define-public (set-approved-token (token principal) (approved bool))
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (map-set approved-tokens token approved)
+        (ok true)
+    )
+)
+
+(define-public (set-allowed-symbol (symbol (string-ascii 10)) (allowed bool))
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (map-set allowed-symbols symbol allowed)
         (ok true)
     )
 )
