@@ -271,3 +271,17 @@
 (define-private (get-current-price)
     (get price (unwrap! (map-get? price-feeds "BTC-USD") u0))
 )
+
+(define-private (get-option-id (option {
+        writer: principal,
+        holder: (optional principal),
+        collateral-amount: uint,
+        strike-price: uint,
+        premium: uint,
+        expiry: uint,
+        is-exercised: bool,
+        option-type: (string-ascii 4),
+        state: (string-ascii 8)
+    }))
+    (var-get next-option-id)
+)
