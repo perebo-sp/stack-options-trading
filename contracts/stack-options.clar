@@ -56,3 +56,28 @@
         source: principal
     }
 )
+
+
+;; Black-Scholes Implementation
+(define-private (calculate-black-scholes-price 
+    (spot-price uint)
+    (strike-price uint)
+    (time-to-expiry uint)
+    (volatility uint)
+    (risk-free-rate uint)
+    (option-type (string-ascii 4)))
+    ;; Simplified Black-Scholes calculation
+    ;; Returns premium in base units
+    (let (
+        (time-sqrt (sqrti (* time-to-expiry u100000)))
+        (vol-adjustment (* volatility time-sqrt))
+        (price-ratio (/ (* spot-price u100000000) strike-price))
+    )
+        (if (is-eq option-type "CALL")
+            ;; Call option pricing
+            (/ (* price-ratio vol-adjustment) u100000)
+            ;; Put option pricing
+            (/ (* strike-price vol-adjustment) (* spot-price u100000))
+        )
+    )
+)
