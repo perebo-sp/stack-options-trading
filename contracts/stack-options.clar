@@ -25,6 +25,11 @@
 (define-constant ERR-ALREADY-EXERCISED (err u1007))
 (define-constant ERR-INVALID-PREMIUM (err u1008))
 
+;; Add new error constants for validation
+(define-constant ERR-INVALID-TOKEN (err u1009))
+(define-constant ERR-INVALID-SYMBOL (err u1010))
+(define-constant ERR-INVALID-TIMESTAMP (err u1011))
+
 ;; Utility Functions
 (define-private (get-min (a uint) (b uint))
     (if (< a b) a b))
@@ -52,6 +57,12 @@
         held-options: (list 10 uint),
         total-collateral-locked: uint
     }
+)
+
+;; Add whitelist for approved tokens
+(define-map approved-tokens
+    principal
+    bool
 )
 
 ;; Counter for option IDs
@@ -296,6 +307,11 @@
         state: (string-ascii 9)
     }))
     (var-get next-option-id)
+)
+
+;; Add function to check if token is approved
+(define-private (is-approved-token (token principal))
+    (default-to false (map-get? approved-tokens token))
 )
 
 ;; Read-only functions
