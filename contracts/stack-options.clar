@@ -186,3 +186,12 @@
         )
     )
 )
+
+;; Private helper functions
+
+(define-private (check-collateral-requirement (amount uint) (strike uint) (option-type (string-ascii 4)))
+    (if (is-eq option-type "CALL")
+        (>= amount strike)
+        (>= amount (/ (* strike u100000000) (get-current-price)))
+    )
+)
