@@ -13,3 +13,20 @@
 (define-constant ERR-INSUFFICIENT-COLLATERAL (err u1006))
 (define-constant ERR-ALREADY-EXERCISED (err u1007))
 (define-constant ERR-INVALID-PREMIUM (err u1008))
+
+
+;; Data Types
+(define-map options
+    uint
+    {
+        writer: principal,
+        holder: (optional principal),
+        collateral-amount: uint,
+        strike-price: uint,
+        premium: uint,
+        expiry: uint,
+        is-exercised: bool,
+        option-type: (string-ascii 4),  ;; "CALL" or "PUT"
+        state: (string-ascii 8)         ;; "ACTIVE", "EXPIRED", "EXERCISED"
+    }
+)
