@@ -295,3 +295,7 @@
 (define-read-only (get-user-position (user principal))
     (map-get? user-positions user)
 )
+
+(define-read-only (get-protocol-fee-rate)
+    (var-get protocol-fee-rate)
+)
