@@ -14,7 +14,6 @@
 (define-constant ERR-ALREADY-EXERCISED (err u1007))
 (define-constant ERR-INVALID-PREMIUM (err u1008))
 
-
 ;; Data Types
 (define-map options
     uint
@@ -56,7 +55,6 @@
         source: principal
     }
 )
-
 
 ;; Black-Scholes Implementation
 (define-private (calculate-black-scholes-price 
@@ -135,7 +133,6 @@
     )
 )
 
-
 ;; Buy an option
 (define-public (buy-option (option-id uint))
     (let (
@@ -168,7 +165,6 @@
         (ok true)
     )
 )
-
 
 ;; Exercise option
 (define-public (exercise-option (option-id uint))
@@ -307,6 +303,21 @@
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
         (asserts! (<= new-rate u1000) ERR-INVALID-PREMIUM)  ;; Max 10%
         (var-set protocol-fee-rate new-rate)
+        (ok true)
+    )
+)
+
+(define-public (update-price-feed 
+    (symbol (string-ascii 10))
+    (price uint)
+    (timestamp uint))
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (map-set price-feeds symbol {
+            price: price,
+            timestamp: timestamp,
+            source: tx-sender
+        })
         (ok true)
     )
 )
